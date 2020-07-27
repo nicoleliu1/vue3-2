@@ -1,0 +1,125 @@
+1、请简述 Vue 首次渲染的过程。
+
+首先进行Vue的初始化，也就是初始化Vue的实例成员以及静态成员。
+
+当初始化结束之后，开始调用构造函数，在构造函数中调用this._init()，这个方法相当于我们整个Vue的入口。
+
+在_init()中最终调用了this.$mount()，共有两个$mount()，第一个$mount()是entry-runtime-with-compiler.js入口文件的$mount()，这个$mount()的核心作用是帮我们把模板编译成render函数，但它首先会判断一下我们当前是否传入了render选项，如果没有传入的话，它会去获取我们的template选项，如果template选项也没有的话，他会把el中的内容作为我们的模板，然后把模板编译成render函数，它是通过compileToFunctions()函数，帮我们把模板编译成render函数的,当把render函数编译好之后，它会把render函数存在我们的options.render中。
+
+那接下来会调用runtime/index.js中的$mount()方法，这个方法中,首先会重新获取我们的el，因为如果是运行时版本的话，是不会entry-runtime-with-compiler.js这个入口中获取el，所以如果是运行时版本的话，我们会在runtime/index.js的$mount()中重新获取el。
+
+接下来调用mountComponent(),mountComponent()是在src/core/instance/lifecycle.js中定义的，在mountComponent()中，首先会判断render选项，如果没有但是传入了模板，并且当前是开发环境的话会发送警告，警告运行时版本不支持编译器。
+
+接下来会触发beforeMount这个生命周期中的钩子函数，也就是开始挂载之前。
+
+然后定义了updateComponent()，在这个方法中，定义了_render和_update，_render的作用是生成虚拟DOM，_update的作用是将虚拟DOM转换成真实DOM，并且挂载到页面上来。
+
+再接下来就是创建Watcher对象，在创建Watcher时，传递了updateComponent这个函数，这个函数最终是在Watcher内部调用的。在Watcher创建完之后还调用了get方法，在get方法中，会调用updateComponent()。
+
+然后触发了生命周期的钩子函数mounted,挂载结束，最终返回Vue实例。
+2、请简述 Vue 响应式原理。
+initState() --> initData() --> observe()
+
+observe(value)
+
+位置：src/core/observer/index.js
+功能：
+判断value是否是对象，如果不是对象直接返回
+判断value对象是否有__ob__,如果有直接返回
+如果没有，创建observer对象
+返回observer对象
+Observer
+
+位置：src/core/observer/index.js
+功能：
+给value对象定义不可枚举的__ob__属性，记录当前的observer对象
+数组的响应式处理
+对象的响应式处理，调用walk方法
+defineReactIve
+
+位置：src/core/observer/index.js
+功能：
+为每一个属性创建dep对象
+如果当前属性的值是对象，调用observe
+定义getter
+收集依赖
+返回属性的值
+定义setter
+保存新值
+如果新值是对象，调用observe
+派发更新（发送通知），调用dep.notify()
+收集依赖
+
+在watcher对象的get方法中调用pushTarget记录Dep.target属性
+访问data中的成员的时候收集依赖，defineReactive的getter中收集依赖
+把属性对应的watcher对象添加到dep的subs数组中
+给childOb收集依赖，目的是子对象添加和删除成员时发送通知
+Watcher
+
+dep.notify()在调用watcher对象的update()方法
+queueWatcher()判断watcher是否被处理，如果没有的话添加到queue队列中，并调用flushScheduleQueue()
+flushScheduleQueue()
+触发beforeUpdate钩子函数
+调用watcher.run()： run() --> get() --> getter() --> updateComponent
+清空上一次的依赖
+触发actived的钩子函数
+触发updated钩子函数
+
+3、请简述虚拟 DOM 中 Key 的作用和好处。
+key 的特殊属性主要用在 Vue 的虚拟 DOM 算法，在新旧 nodes 对比时辨识 VNodes。如果不使用 key，Vue 会使用一种最大限度减少动态元素并且尽可能的尝试修复/再利用相同类型元素的算法。使用 key，它会基于 key 的变化重新排列元素顺序，并且会移除 key 不存在的元素。
+
+有相同父元素的子元素必须有独特的 key。重复的 key 会造成渲染错误。
+
+在这里循环渲染是我们接触key最多的场景，不管是react的map、forEach渲染还是vue的v-for渲染，浏览器希望你的为元素赋予都一无二的key值！
+
+4、请简述 Vue 中模板编译的过程。
+1. 模板编译入口
+位置：src/compiler/create-compiler.js
+
+createCompilerCreator函数返回了compile对象和compileToFunctions函数。
+
+模板编译的入口函数 compileToFunctions() 中的 generate 函数的作用是把优化后的 AST 转换成代码
+
+模板和插值表达式在编译的过程中都会被转换成对应的代码形式，不会出现在 render 函数中
+
+2. 模板编译过程 - baseCompile - AST
+位置：src/compiler/index.js
+
+在createCompilerCreator函数中，首先用parse函数把模板转换成ast抽象语法树，然后使用optimize函数优化抽象语法树，再用generate函数把抽象语法书生成字符串形式的js代码
+
+export const createCompiler = createCompilerCreator(function baseCompile (
+  template: string,
+  options: CompilerOptions
+): CompiledResult {
+  // 把模板转换成ast抽象语法树
+  // 抽象语法树，用来以树形的方式描述代码结构
+  const ast = parse(template.trim(), options)
+  if (options.optimize !== false) {
+    // 优化抽象语法树
+    optimize(ast, options)
+  }
+  // 把抽象语法书生成字符串形式的js代码
+  const code = generate(ast, options)
+  return {
+    ast,
+    // 渲染函数
+    render: code.render,
+    // 静态渲染函数
+    staticRenderFns: code.staticRenderFns
+  }
+})
+3. 为什么要使用抽象语法树
+模板字符串转换成AST后，可以通过AST对模板做优化处理
+标记模板中的静态内容，在patch的时候直接掉过静态内容
+在patch的过程中静态内容不需要对比和重新渲染
+4. AST在线生成网站
+AST 在线生成网址：https://astexplorer.net/
+5. 模板编译过程 - baseCompile - optimize
+位置：src/compiler/optimizer.js
+
+优化处理，跳过静态子树。staticRoot是静态根节点。指节点中只包含纯文本的节点，是静态节点，但不是静态根节点，因为此时优化的成本大于收益，Vue认为这种优化会带来负面的影响
+
+静态根节点不会被重新渲染，patch 的过程中会跳过静态根节点。
+
+6. 模板编译过程 - baseCompile - generate
+generate() 函数返回的是字符串形式的代码，还需要 toFunctions() 转换成函数的形式
